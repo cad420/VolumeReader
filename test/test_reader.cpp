@@ -3,21 +3,29 @@
 //
 
 #include<VolumeReader/volume_reader.h>
-
+#define volume_name0 "aneurism_256_256_256_uint8.raw"
+#define volume_name1 "raw_256_256_256_uint8.raw"
 int main(int argc,char** argv)
 {
 
     BlockVolumeReader reader;
-    reader.setupRawVolumeInfo({"aneurism_256_256_256_uint8.raw","out.h264",256,256,256,32,1});
+    reader.setupRawVolumeInfo({volume_name1,"out.h264",256,256,256,64,1});
     reader.start_read();
     std::vector<uint8_t> data;
     int cnt=0;
-//    while(!reader.is_read_finish() || !reader.isBlockWareHouseEmpty()){
-//        std::cout<<"turn "<<cnt++<<std::endl;
-//        std::array<uint32_t,3> idx={};
-//        reader.get_block(data,idx);
-////        std::cout<<data.size()<<std::endl;
-////        std::cout<<idx[0]<<" "<<idx[1]<<" "<<idx[2]<<std::endl;
-//    }
+    std::string out_dir="./raw_block_test/";
+    while(!reader.is_read_finish() || !reader.isBlockWareHouseEmpty()){
+        data.clear();
+        std::cout<<"turn "<<cnt++<<std::endl;
+        std::array<uint32_t,3> idx={};
+        reader.get_block(data,idx);
+//        std::cout<<data.size()<<std::endl;
+        std::cout<<idx[0]<<" "<<idx[1]<<" "<<idx[2]<<std::endl;
+
+        std::string out_name=std::to_string(idx[0])+"_"+std::to_string(idx[1])+"_"+std::to_string(idx[2]);
+        std::fstream out(out_dir+out_name,std::ios::out|std::ios::binary);
+        out.write(reinterpret_cast<char*>(data.data()),data.size());
+        out.close();
+    }
     return 0;
 }

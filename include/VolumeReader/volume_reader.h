@@ -83,6 +83,7 @@ public:
      * @return if the huge volume data finish read all
      */
     bool is_read_finish();
+
     bool isBlockWareHouseEmpty();
 private:
     std::string input_file_path;
@@ -218,10 +219,7 @@ inline void BlockVolumeReader::get_block(std::vector<uint8_t> &block, std::array
     if(!is_read_finish())
         asyn_get.wait(batch_blocks_get_lock);//must wait for signal
 
-//    std::cout<<"after wait"<<std::endl;
     batch_blocks_mutex.lock();
-
-
 
     std::cout<<"size "<<this->block_manager.block_warehouse.size()<<std::endl;
     index=this->block_manager.block_warehouse.front().index;
@@ -324,12 +322,11 @@ inline void BlockVolumeReader::read_patch_blocks()
     }
     for(uint32_t i=0;i<batch_slice_read_num;i++){
         in.seekg(batch_read_pos+i*raw_slice_size,std::ios::beg);
-        std::cout<<"offset "<<batch_read_pos+i*raw_slice_size<<std::endl;
         for(uint32_t j=0;j<batch_slice_line_read_num;j++){
             std::vector<uint8_t> read_line_buffer;
             read_line_buffer.assign(batch_slice_line_size,DEFAULT_VALUE);
             in.read(reinterpret_cast<char*>(read_line_buffer.data()),raw_x);
-            uint32_t offset=z_offset*modify_x*block_length+y_offset*modify_x+padding;
+            uint32_t offset=z_offset*(modify_x+2*padding)*block_length+y_offset*(modify_x+2*padding)+padding;
             read_buffer.insert(read_buffer.cbegin()+offset,
                                read_line_buffer.cbegin(),read_line_buffer.cend());
         }
@@ -352,6 +349,7 @@ inline void BlockVolumeReader::read_patch_blocks()
         this->block_manager.block_warehouse.push(std::move(block));
 
     }
+
     this->batch_read_turn++;
 
     read_buffer.clear();
