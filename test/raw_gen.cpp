@@ -40,8 +40,36 @@ void gen_inspect()
         std::cout<<(int)data[i]<<" ";
     }
 }
+void read_raw()
+{
+    std::string file_name="uncompress_test.raw";
+    std::fstream in(file_name,std::ios::in|std::ios::binary);
+    if(!in.is_open()){
+        std::cout<<"file open failed!"<<std::endl;
+        return;
+    }
+    std::vector<uint8_t> data;
+    size_t length=256;
+    data.resize(length*length*length);
+    in.read(reinterpret_cast<char*>(data.data()),data.size());
+    for(size_t z=0;z<length;z++){
+        for(size_t y=0;y<length;y++){
+            for(size_t x=0;x<length;x++){
+                size_t index=z*length*length+y*length+x;
+                if( index%4==0 && (int)data[index]!=0){
+
+                    std::cout<<"index: "<<index<<"\terror: "<<(int)data[index]<<std::endl;
+                }
+//                if(z==0){
+//                    std::cout<<(int)data[index]<<" ";
+//                }
+            }
+//            std::cout<<std::endl;
+        }
+    }
+}
 int main(int argc,char** argv)
 {
-    gen_inspect();
+    read_raw();
     return 0;
 }

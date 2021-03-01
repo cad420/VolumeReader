@@ -13,6 +13,7 @@
 #include<fstream>
 #include<iostream>
 #define DEFAULT_VALUE 0
+
 class IVolumeReader{
 public:
 
@@ -320,29 +321,42 @@ inline void BlockVolumeReader::read_patch_blocks()
             batch_slice_line_read_num=block_length_nopadding+2*padding;
         }
     }
+
     for(uint32_t i=0;i<batch_slice_read_num;i++){
         in.seekg(batch_read_pos+i*raw_slice_size,std::ios::beg);
-        for(uint32_t j=0;j<batch_slice_line_read_num;j++){
-            std::vector<uint8_t> read_line_buffer;
-            read_line_buffer.assign(batch_slice_line_size,DEFAULT_VALUE);
-            in.read(reinterpret_cast<char*>(read_line_buffer.data()),raw_x);
-            uint32_t offset=z_offset*(modify_x+2*padding)*block_length+y_offset*(modify_x+2*padding)+padding;
-            read_buffer.insert(read_buffer.cbegin()+offset,
-                               read_line_buffer.cbegin(),read_line_buffer.cend());
-        }
-    }
 
+//        std::cout<<i<<std::endl;
+
+        std::vector<uint8_t> read_batch_slice_buffer;
+        read_batch_slice_buffer.assign(raw_x*batch_slice_line_read_num,DEFAULT_VALUE);
+
+        in.read(reinterpret_cast<char*>(read_batch_slice_buffer.data()),read_batch_slice_buffer.size());
+
+        for(uint32_t j=0;j<batch_slice_line_read_num;j++) {
+            uint32_t offset=(z_offset+i)*(modify_x+2*padding)*block_length+(y_offset+j)*(modify_x+2*padding)+padding;
+            memcpy(read_buffer.data()+offset,read_batch_slice_buffer.data()+j*raw_x,raw_x);
+        }
+
+//        for(uint32_t j=0;j<batch_slice_line_read_num;j++){
+//            std::vector<uint8_t> read_line_buffer;
+//            read_line_buffer.assign(batch_slice_line_size,DEFAULT_VALUE);
+//            in.read(reinterpret_cast<char*>(read_line_buffer.data()),raw_x);
+//            uint32_t offset=(i+z_offset)*(modify_x+2*padding)*block_length+(y_offset+j)*(modify_x+2*padding)+padding;
+//            memcpy(read_buffer.data()+offset,read_line_buffer.data(),read_line_buffer.size());
+//        }
+
+    }
 
     uint32_t batch_length=modify_x+2*padding;
     for(uint32_t i=0;i<this->block_num_per_batch;i++){
         Block block;
         block.index={i,y,z};
+        block.data.assign(block_byte_size,DEFAULT_VALUE);
         for(size_t z_i=0;z_i<block_length;z_i++){
             for(size_t y_i=0;y_i<block_length;y_i++){
                 uint32_t offset=z_i*batch_slice_size+y_i*batch_length+i*block_length_nopadding;
-                block.data.insert(block.data.cbegin()+z_i*block_length*block_length+y_i*block_length,
-                                  read_buffer.cbegin()+offset,
-                                  read_buffer.cbegin()+offset+block_length);
+                memcpy(block.data.data()+z_i*block_length*block_length+y_i*block_length,
+                       read_buffer.data()+offset,block_length);
             }
         }
         this->block_manager.cur_cached_block_num++;

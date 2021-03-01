@@ -9,7 +9,7 @@ int main(int argc,char** argv)
 {
 
     BlockVolumeReader reader;
-    reader.setupRawVolumeInfo({volume_name1,"out.h264",256,256,256,64,1});
+    reader.setupRawVolumeInfo({volume_name0,"out.h264",256,256,256,256,1});
     reader.start_read();
     std::vector<uint8_t> data;
     int cnt=0;
@@ -22,7 +22,7 @@ int main(int argc,char** argv)
 //        std::cout<<data.size()<<std::endl;
         std::cout<<idx[0]<<" "<<idx[1]<<" "<<idx[2]<<std::endl;
 
-        std::string out_name=std::to_string(idx[0])+"_"+std::to_string(idx[1])+"_"+std::to_string(idx[2]);
+        std::string out_name=std::to_string(idx[0])+"#"+std::to_string(idx[1])+"#"+std::to_string(idx[2])+"_256_256_256_uint8.raw";
         std::fstream out(out_dir+out_name,std::ios::out|std::ios::binary);
         out.write(reinterpret_cast<char*>(data.data()),data.size());
         out.close();
