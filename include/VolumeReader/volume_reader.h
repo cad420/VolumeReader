@@ -86,6 +86,8 @@ public:
     bool is_read_finish();
 
     bool isBlockWareHouseEmpty();
+
+    std::array<uint32_t,3> get_dim() const;
 private:
     std::string input_file_path;
     std::string output_file_path;
@@ -395,6 +397,10 @@ bool BlockVolumeReader::read_patch_enable()
 
 inline bool BlockVolumeReader::isBlockWareHouseEmpty() {
     return this->block_manager.cur_cached_block_num==0;
+}
+
+std::array<uint32_t, 3> BlockVolumeReader::get_dim() const {
+    return this->dim;
 }
 
 
