@@ -9,7 +9,7 @@ int main(int argc,char** argv)
 {
 
     BlockVolumeReader reader;
-    reader.setupRawVolumeInfo({volume_name0,"out.h264",256,256,256,128,1});
+    reader.setupRawVolumeInfo({volume_name0,"",256,256,256,128,1});
     reader.start_read();
     std::vector<uint8_t> data;
     int cnt=0;

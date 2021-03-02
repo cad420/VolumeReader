@@ -103,11 +103,11 @@ private:
     std::fstream in;
     std::array<uint32_t, 3> dim;
     uint32_t total_block_num;
-    uint32_t block_byte_size;//block_length^3
+    uint64_t block_byte_size;//block_length^3
     uint32_t batch_read_cnt;//total batch read number
     uint32_t batch_read_turn;//current batch read turn
     uint32_t block_num_per_batch;
-    uint32_t batch_cached_byte_size;//equal block_byte_size*block_num_per_batch
+    uint64_t batch_cached_byte_size;//equal block_byte_size*block_num_per_batch
 
 
     uint32_t max_memory_size_GB;
@@ -249,18 +249,18 @@ inline void BlockVolumeReader::read_patch_blocks()
 
     std::vector<uint8_t> read_buffer;
 
-    uint32_t read_batch_size=block_length*block_length*(modify_x+2*padding);
+    uint64_t read_batch_size=block_length*block_length*(modify_x+2*padding);
     read_buffer.assign(read_batch_size,DEFAULT_VALUE);
-    uint32_t batch_slice_line_size=modify_x+2*padding;
+    uint64_t batch_slice_line_size=modify_x+2*padding;
 
     uint32_t z=this->batch_read_turn/this->dim[1];
     uint32_t y=this->batch_read_turn%this->dim[1];
-    uint32_t batch_slice_read_num=0;
-    uint32_t batch_slice_line_read_num=0;
+    uint64_t batch_slice_read_num=0;
+    uint64_t batch_slice_line_read_num=0;
     uint64_t batch_read_pos=0;
-    uint32_t batch_slice_size=block_length*(modify_x+2*padding);
-    uint32_t raw_slice_size=raw_x*raw_y;
-    uint32_t y_offset,z_offset;
+    uint64_t batch_slice_size=block_length*(modify_x+2*padding);
+    uint64_t raw_slice_size=raw_x*raw_y;
+    uint64_t y_offset,z_offset;
 
     if(z==0){
         batch_slice_read_num=block_length_nopadding+padding;
@@ -324,18 +324,16 @@ inline void BlockVolumeReader::read_patch_blocks()
         }
     }
 
-    for(uint32_t i=0;i<batch_slice_read_num;i++){
+    for(uint64_t i=0;i<batch_slice_read_num;i++){
         in.seekg(batch_read_pos+i*raw_slice_size,std::ios::beg);
-
-//        std::cout<<i<<std::endl;
 
         std::vector<uint8_t> read_batch_slice_buffer;
         read_batch_slice_buffer.assign(raw_x*batch_slice_line_read_num,DEFAULT_VALUE);
 
         in.read(reinterpret_cast<char*>(read_batch_slice_buffer.data()),read_batch_slice_buffer.size());
 
-        for(uint32_t j=0;j<batch_slice_line_read_num;j++) {
-            uint32_t offset=(z_offset+i)*(modify_x+2*padding)*block_length+(y_offset+j)*(modify_x+2*padding)+padding;
+        for(uint64_t j=0;j<batch_slice_line_read_num;j++) {
+            uint64_t offset=(z_offset+i)*(modify_x+2*padding)*block_length+(y_offset+j)*(modify_x+2*padding)+padding;
             memcpy(read_buffer.data()+offset,read_batch_slice_buffer.data()+j*raw_x,raw_x);
         }
 
@@ -349,14 +347,14 @@ inline void BlockVolumeReader::read_patch_blocks()
 
     }
 
-    uint32_t batch_length=modify_x+2*padding;
+    uint64_t batch_length=modify_x+2*padding;
     for(uint32_t i=0;i<this->block_num_per_batch;i++){
         Block block;
         block.index={i,y,z};
         block.data.assign(block_byte_size,DEFAULT_VALUE);
         for(size_t z_i=0;z_i<block_length;z_i++){
             for(size_t y_i=0;y_i<block_length;y_i++){
-                uint32_t offset=z_i*batch_slice_size+y_i*batch_length+i*block_length_nopadding;
+                uint64_t offset=z_i*batch_slice_size+y_i*batch_length+i*block_length_nopadding;
                 memcpy(block.data.data()+z_i*block_length*block_length+y_i*block_length,
                        read_buffer.data()+offset,block_length);
             }
