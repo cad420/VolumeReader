@@ -21,7 +21,28 @@ public:
 
 class RawVolumeReader{
 public:
-
+    RawVolumeReader()=default;
+    void read(std::vector<uint8_t>& data,const char* file_name,int raw_x,int raw_y,int raw_z){
+        std::fstream in(file_name,std::ios::in|std::ios::binary);
+        if(!in.is_open()){
+            std::cout<<"file open failed: "<<file_name<<std::endl;
+            return;
+        }
+        int64_t expect_file_size=(int64_t)raw_x*raw_y*raw_z;
+        int64_t exact_file_size=in.seekg(std::ios::end).tellg();
+        if(expect_file_size<0){
+            std::cout<<"wrong raw_xyz"<<std::endl;
+            return;
+        }
+        else if(exact_file_size>expect_file_size){
+            std::cout<<"file size conflict"<<std::endl;
+            return;
+        }
+        data.resize(expect_file_size);
+        in.seekg(std::ios::beg);
+        in.read(reinterpret_cast<char*>(data.data()),data.size());
+        in.close();
+    }
 };
 
 class BlockVolumeReader{
