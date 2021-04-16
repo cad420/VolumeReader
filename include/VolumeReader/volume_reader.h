@@ -73,7 +73,7 @@ public:
         std::vector<BlockState> block_states;//size equal to total block count
     };
 public:
-    BlockVolumeReader()=default;
+    BlockVolumeReader():max_memory_size_GB(32){};
     explicit BlockVolumeReader(RawVolumeInfo raw_volume_info) noexcept;
     virtual ~BlockVolumeReader(){
         read_task.join();
@@ -176,7 +176,7 @@ inline bool BlockVolumeReader::setupRawVolumeInfo(BlockVolumeReader::RawVolumeIn
         this->modify_x=this->dim[0]*block_length_nopadding;
         this->modify_y=this->dim[1]*block_length_nopadding;
         this->modify_z=this->dim[2]*block_length_nopadding;
-        if(dim[0]==1 || dim[1]==1 || dim[2]==1){
+        if(dim[0]==0 || dim[1]==0 || dim[2]==0){
             std::cout<<"bad block length!"<<std::endl;
             return false;
         }
@@ -205,22 +205,23 @@ inline void BlockVolumeReader::start_read()
         std::cout<<"read is not read! check and reset raw volume info!"<<std::endl;
         return;
     }
-    batch_blocks_read_lock=std::unique_lock<std::mutex>(batch_blocks_read_mutex);
-    batch_blocks_get_lock=std::unique_lock<std::mutex>(batch_blocks_get_mutex);
+//    batch_blocks_read_lock=std::unique_lock<std::mutex>(batch_blocks_read_mutex);
+//    batch_blocks_get_lock=std::unique_lock<std::mutex>(batch_blocks_get_mutex);
 //    batch_blocks_lock=std::unique_lock<std::mutex>(batch_blocks_mutex);
     read_task=std::thread([this](){
           std::cout<<"start read task"<<std::endl;
           while(!is_read_finish()){
-              asyn_read.wait(batch_blocks_read_lock,[this]{//after wait locked, if wait then unlocked and sleeping wait
-                  if(read_patch_enable())
-                      return true;
-                  else return false;
-              });
-
-              read_patch_blocks();
+//              asyn_read.wait(batch_blocks_read_lock,[this]{//after wait locked, if wait then unlocked and sleeping wait
+//                  if(read_patch_enable())
+//                      return true;
+//                  else return false;
+//              });
+            if(read_patch_enable()){
+                read_patch_blocks();
+            }
           }
           std::cout<<"read finished"<<std::endl;
-          asyn_get.notify_all();
+//          asyn_get.notify_all();
     }
     );
 }
@@ -240,33 +241,36 @@ inline void BlockVolumeReader::get_block(std::vector<uint8_t> &block, std::array
 {
 //    std::cout<<__FUNCTION__ <<std::endl;
 
-    if(!is_read_finish())
-        asyn_get.wait(batch_blocks_get_lock);//must wait for signal
+//    if(!is_read_finish())
+//        asyn_get.wait(batch_blocks_get_lock,[](){return true;});//must wait for signal
 
-    batch_blocks_mutex.lock();
+    {
+        std::unique_lock<std::mutex> lk(batch_blocks_mutex);
+        asyn_get.wait(lk,[&](){
+            return !isBlockWareHouseEmpty();
+        });
 
-    std::cout<<"size "<<this->block_manager.block_warehouse.size()<<std::endl;
-    index=this->block_manager.block_warehouse.front().index;
-    block=std::move(this->block_manager.block_warehouse.front()).data;
-    this->block_manager.block_warehouse.pop();
+        std::cout<<"size "<<this->block_manager.block_warehouse.size()<<std::endl;
+        index=this->block_manager.block_warehouse.front().index;
+        block=std::move(this->block_manager.block_warehouse.front()).data;
+        this->block_manager.block_warehouse.pop();
 
 
-    this->block_manager.cur_cached_block_num--;
-    std::cout<<"remain "<<this->block_manager.cur_cached_block_num<<std::endl;
-    batch_blocks_mutex.unlock();
-
-    if(!is_read_finish() || read_patch_enable()){
-        asyn_read.notify_one();
+        this->block_manager.cur_cached_block_num--;
+        std::cout<<"remain "<<this->block_manager.cur_cached_block_num<<std::endl;
     }
+    asyn_read.notify_one();
+
+
+//    if(!is_read_finish() || read_patch_enable()){
+//        asyn_read.notify_one();
+//    }
 
 }
 
 inline void BlockVolumeReader::read_patch_blocks()
 {
     std::cout<<__FUNCTION__ <<std::endl;
-
-    batch_blocks_mutex.lock();
-
 
     std::vector<uint8_t> read_buffer;
 
@@ -283,10 +287,39 @@ inline void BlockVolumeReader::read_patch_blocks()
     uint64_t raw_slice_size=raw_x*raw_y;
     uint64_t y_offset,z_offset;
 
-    if(z==0){
+    if(z==0 && z==(dim[2]-1)){// for z==1
+        batch_slice_read_num=raw_z;
+        z_offset=padding;
+        if(y==0 && y==(dim[1]-1)){
+            y_offset=padding;
+            batch_read_pos=0;
+            batch_slice_line_read_num=raw_y;
+        }
+        else if(y==0){
+            y_offset=padding;
+            batch_read_pos=0;
+            batch_slice_line_read_num=block_length_nopadding+padding;
+        }
+        else if(y==(dim[1]-1)){
+            y_offset=0;
+            batch_read_pos=(uint64_t)(y*block_length_nopadding-padding)*raw_x;
+            batch_slice_line_read_num=raw_y-y*block_length_nopadding+padding;
+        }
+        else{
+            y_offset=0;
+            batch_read_pos=(uint64_t)(y*block_length_nopadding-padding)*raw_x;
+            batch_slice_line_read_num=block_length_nopadding+2*padding;
+        }
+    }
+    else if(z==0){
         batch_slice_read_num=block_length_nopadding+padding;
         z_offset=padding;
-        if(y==0){
+        if(y==0 && y==(dim[1]-1)){
+            y_offset=padding;
+            batch_read_pos=0;
+            batch_slice_line_read_num=raw_y;
+        }
+        else if(y==0){
             y_offset=padding;
             batch_read_pos=0;
             batch_slice_line_read_num=block_length_nopadding+padding;
@@ -305,7 +338,12 @@ inline void BlockVolumeReader::read_patch_blocks()
     else if(z==(dim[2]-1)){
         z_offset=0;
         batch_slice_read_num=raw_z-z*block_length_nopadding+padding;
-        if(y==0){
+        if(y==0 && y==(dim[1]-1)){
+            y_offset=padding;
+            batch_read_pos=(uint64_t)(z*block_length_nopadding-padding)*raw_slice_size;
+            batch_slice_line_read_num=raw_y;
+        }
+        else if(y==0){
             y_offset=padding;
             batch_read_pos=(uint64_t)(z*block_length_nopadding-padding)*raw_slice_size;
             batch_slice_line_read_num=block_length_nopadding+padding;
@@ -326,7 +364,13 @@ inline void BlockVolumeReader::read_patch_blocks()
     else{
         z_offset=0;
         batch_slice_read_num=block_length;
-        if(y==0){
+
+        if(y==0 && y==(dim[1]-1)){
+            y_offset=padding;
+            batch_read_pos=(uint64_t)(z*block_length_nopadding-padding)*raw_slice_size;
+            batch_slice_line_read_num=raw_y;
+        }
+        else if(y==0){
             y_offset=padding;
             batch_read_pos=(uint64_t)(z*block_length_nopadding-padding)*raw_slice_size;
             batch_slice_line_read_num=block_length_nopadding+padding;
@@ -344,7 +388,7 @@ inline void BlockVolumeReader::read_patch_blocks()
             batch_slice_line_read_num=block_length_nopadding+2*padding;
         }
     }
-
+//    std::cout<<"batch_read_pos: "<<batch_read_pos<<std::endl;
     for(uint64_t i=0;i<batch_slice_read_num;i++){
         in.seekg(batch_read_pos+i*raw_slice_size,std::ios::beg);
 
@@ -368,6 +412,19 @@ inline void BlockVolumeReader::read_patch_blocks()
 
     }
 
+//    int maxdata=0;
+//    for(size_t i=0;i<read_buffer.size();i++){
+//        if(read_buffer[i]>maxdata){
+//            maxdata=read_buffer[i];
+//        }
+//    }
+//    std::cout<<"read_buffer max data: "<<maxdata<<std::endl;
+
+    std::unique_lock<std::mutex> lk(batch_blocks_mutex);
+    asyn_read.wait(lk,[&](){
+       return read_patch_enable();
+    });
+
     uint64_t batch_length=modify_x+2*padding;
     for(uint32_t i=0;i<this->block_num_per_batch;i++){
         Block block;
@@ -380,6 +437,16 @@ inline void BlockVolumeReader::read_patch_blocks()
                        read_buffer.data()+offset,block_length);
             }
         }
+
+//        std::cout<<block.index[0]<<" "<<block.index[1]<<" "<<block.index[2]<<std::endl;
+//        int maxdata=0;
+//        for(size_t i=0;i<block.data.size();i++){
+//            if((int)block.data[i]>maxdata){
+//                maxdata=block.data[i];
+//            }
+//        }
+//        std::cout<<"max data: "<<maxdata<<std::endl;
+
         this->block_manager.cur_cached_block_num++;
         this->block_manager.block_warehouse.push(std::move(block));
 
@@ -389,10 +456,12 @@ inline void BlockVolumeReader::read_patch_blocks()
 
     read_buffer.clear();
     std::cout<<"finish read batch"<<std::endl;
-    batch_blocks_mutex.unlock();
 
-    asyn_get.notify_all();
-    asyn_read.notify_one();
+    asyn_get.notify_one();
+//    batch_blocks_mutex.unlock();
+
+//    asyn_get.notify_all();
+//    asyn_read.notify_one();
 
 }
 
@@ -405,6 +474,8 @@ inline bool BlockVolumeReader::isReadReady()
 bool BlockVolumeReader::read_patch_enable()
 {
     if(this->block_manager.cur_cached_block_num+this->block_num_per_batch<=this->block_manager.max_cached_block_num){
+        std::cout<<"cur_cached_block_num: "<<this->block_manager.cur_cached_block_num<<std::endl;
+        std::cout<<"max_cached_block_num: "<<this->block_manager.max_cached_block_num<<std::endl;
 //        std::cout<<"read enable"<<std::endl;
         return true;
     }
