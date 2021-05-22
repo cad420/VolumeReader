@@ -274,7 +274,7 @@ inline void BlockVolumeReader::read_patch_blocks()
 
     std::vector<uint8_t> read_buffer;
 
-    uint64_t read_batch_size=block_length*block_length*(modify_x+2*padding);
+    uint64_t read_batch_size=(uint64_t)block_length*block_length*(modify_x+2*padding);
     read_buffer.assign(read_batch_size,DEFAULT_VALUE);
     uint64_t batch_slice_line_size=modify_x+2*padding;
 
